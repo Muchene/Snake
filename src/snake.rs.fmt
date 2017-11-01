@@ -1,0 +1,229 @@
+
+use super::piston_window::*;
+extern crate rand;
+
+
+use self::rand::{thread_rng, Rng};
+
+const BLOCK_SIZE : f64 = 10.0;
+pub const WINDOW_SIZE_X : f64 = 640.0;
+pub const WINDOW_SIZE_Y : f64 = 640.0;
+const START_SPEED  : f64 = 1.0;
+
+#[derive(PartialEq, Clone,Copy)]
+enum Direction {
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT
+}
+
+pub struct Game {
+    direction : Direction,
+    snake : Vec<Block>,
+    mouse : Block,
+    speed : f64,
+    pub over  : bool
+}
+
+#[derive(Copy,Clone)]
+pub struct Block {
+    x : f64,
+    y : f64,
+    dir : Direction 
+}
+
+
+fn random_block() -> Block {
+    let mut rng = rand::thread_rng();
+  
+    Block{
+        x: rng.gen_range(BLOCK_SIZE*3.0, WINDOW_SIZE_X - (3.0*BLOCK_SIZE)) as f64,
+        y: rng.gen_range(BLOCK_SIZE*3.0, WINDOW_SIZE_Y - (3.0*BLOCK_SIZE)) as f64,
+        dir: Direction::DOWN
+    }
+}
+
+fn in_bound(lo : f64 , hi : f64, num :f64) -> bool {
+    num >= lo && num <= hi 
+}
+
+
+
+impl Block {
+
+    fn add_block(&self, prev_blk : &Block) -> Block {
+        let mut dir = self.dir;
+        match prev_blk.dir {
+            Direction::UP => {
+                Block{
+                    x: prev_blk.x,
+                    y: prev_blk.y + (2.5*BLOCK_SIZE),
+                    dir: prev_blk.dir
+                }
+            },
+            Direction::DOWN => {
+                Block{
+                    x: prev_blk.x,
+                    y: prev_blk.y - 2.5*BLOCK_SIZE,
+                    dir: prev_blk.dir
+                }
+            },
+            Direction::LEFT =>{
+                Block{
+                    x: prev_blk.x + 2.5*BLOCK_SIZE,
+                    y: prev_blk.y,
+                    dir: prev_blk.dir
+                }
+            },
+            Direction::RIGHT => {
+                Block {
+                    x: prev_blk.x - 2.5*BLOCK_SIZE,
+                    y: prev_blk.y,
+                    dir: prev_blk.dir,
+                }
+            }
+        }
+    }
+
+    fn 
+}
+
+impl Game {
+
+    pub fn new() -> Game {
+        let snake = vec![
+            Block{
+                x : WINDOW_SIZE_X/2.0,  
+                y : WINDOW_SIZE_Y /2.0,
+                dir: Direction::LEFT}];
+
+        Game {
+            direction : Direction::LEFT,
+            snake : snake,
+            mouse : random_block(),
+            speed : START_SPEED,
+            over  : false
+        }
+    }
+
+    pub fn on_input(&mut self, but: Button) {
+        match but {
+            Button::Keyboard(Key::Up) => {
+                self.direction = Direction::UP;
+            }
+            Button::Keyboard(Key::Down) => {
+                if self.direction != Direction::UP {
+                    self.direction = Direction::DOWN;
+                }
+            }
+            Button::Keyboard(Key::Left) => {
+                if self.direction != Direction::RIGHT{
+                    self.direction = Direction::LEFT;
+                }
+            }
+            Button::Keyboard(Key::Right) => {
+                if self.direction != Direction::LEFT {
+                    self.direction = Direction::RIGHT;
+                }
+            }
+            _ => {}
+        }
+      
+    }
+
+    pub fn on_update(&mut self, upd: UpdateArgs) {
+        if self.over{
+            return;
+        }
+        
+        let mut head = self.snake[0];
+        match self.direction {
+            Direction::UP => {
+                head.y -= self.speed;
+            },
+            Direction::DOWN => {
+                head.y += self.speed;
+            },
+            Direction::LEFT => {
+                head.x -= self.speed;
+            },
+            Direction::RIGHT => {
+                head.x += self.speed;
+            }
+        }
+        head.dir = self.direction;
+        if self.wall_collide(&head) {
+            self.over = true;
+            return;
+        }
+        self.snake = self.create_new_snake(&head);
+    }
+
+    fn create_new_snake(&mut self, head: &Block) -> Vec<Block> {
+
+        let mut new_snake = Vec::with_capacity(self.snake.capacity());
+        let mut prev_blk = head;
+        new_snake.push(head.clone());
+        for blk in self.snake.iter().skip(1) {
+            let new_blk = self.add_block(&prev_blk);
+            if self.block_collide(&new_blk) {
+                self.over = true;
+                println!("head {}-{} blk: {}-{}", head.x, head.y, new_blk.x, new_blk.y);
+                return new_snake;
+            }
+            new_snake.push(new_blk);
+            prev_blk = blk;
+        } 
+        if self.block_collide(&self.mouse) {
+            self.mouse = random_block();
+            new_snake.push(self.add_block(prev_blk));
+        }
+        new_snake
+    }
+
+    fn wall_collide(&self, head : &Block) -> bool {
+        let col_top = in_bound(head.y - BLOCK_SIZE, head.y + BLOCK_SIZE, -10.5); 
+        let col_left = in_bound(head.x - BLOCK_SIZE, head.x + BLOCK_SIZE, -10.0);
+        let col_right = in_bound(head.x - BLOCK_SIZE, head.x + BLOCK_SIZE, WINDOW_SIZE_X+0.5);
+        let col_bottom = in_bound(head.y - BLOCK_SIZE, head.y + BLOCK_SIZE, WINDOW_SIZE_Y+0.5);
+        col_top || col_left || col_right || col_bottom
+    }
+
+    fn block_collide(&self, blk : &Block) -> bool{
+        
+        let tl = (self.snake[0].x - BLOCK_SIZE, self.snake[0].y - BLOCK_SIZE);
+        let br = (self.snake[0].x + BLOCK_SIZE, self.snake[0].y + BLOCK_SIZE);
+
+        let blk_tl = (blk.x - BLOCK_SIZE, blk.y-BLOCK_SIZE);
+        let blk_br = (blk.x + BLOCK_SIZE, blk.y+BLOCK_SIZE);
+
+        if tl.0 >= blk_br.0 || blk_tl.0 >= br.0 {
+            false
+        }else if tl.1 >= blk_br.1 || blk_tl.1 >= br.1 {
+            false
+        }else {
+            println!("tl:{}-{} br:{}-{} blk_tl:{}-{} blk_br:{}-{}", tl.0,tl.1, br.0, br.1, blk_tl.0, blk_tl.1, blk_br.0, blk_br.1);
+            true
+        }
+    }
+
+    
+
+    pub fn on_draw(&mut self, ren: RenderArgs,  w: &mut PistonWindow, e: &Input ) {
+        w.draw_2d(e, |c, g| {
+            clear([1.0, 1.0, 1.0, 1.0], g);
+            for blk in self.snake.iter() {
+                let center = c.transform.trans(blk.x as f64, blk.y as f64);
+                let square = rectangle::square(0.0, 0.0, BLOCK_SIZE as f64);
+                let snake_color = [0.0, 0.0, 0.0, 1.0];
+                rectangle(snake_color, square, center, g);
+            }
+            let center = c.transform.trans(self.mouse.x, self.mouse.y);
+            let square = rectangle::square(0.0, 0.0, BLOCK_SIZE as f64);
+            let mouse_color = [1.0, 0.0, 0.0, 1.0];
+            rectangle(mouse_color, square, center, g);
+
+        });
+    }
+}
